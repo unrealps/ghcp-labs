@@ -47,69 +47,18 @@ peopleflow/
 
 ## Part 1 — Copilot Instructions (15 min)
 
-### What are they?
 
-Copilot Instructions are markdown files that Copilot reads **automatically** and follows when generating code. They define your project's conventions — coding style, error handling patterns, testing standards — so Copilot doesn't guess.
+### What are Copilot Instructions?
 
-There are three levels:
+Copilot Instructions are markdown files that teach Copilot your project's conventions—like coding style, error handling, and testing standards. When present, Copilot reads these files automatically and adapts its code suggestions to match your team's preferences, so you get consistent, high-quality code without having to repeat yourself.
 
-| File | Scope | Auto-applied? |
-|------|-------|--------------|
-| `.github/copilot-instructions.md` | Entire repo | ✅ Yes, always |
-| `.github/copilot/prompts/*.prompt.md` | On-demand reusable prompts | Only when invoked via `/` |
-| VS Code settings (`github.copilot.chat.codeGeneration.instructions`) | Your local editor | ✅ Yes, for you |
+**How are Copilot Instructions different from Agents and Skills?**
 
-### Task 1a: See instructions change Copilot's output
+- **Instructions**: Set the baseline rules and conventions for your project. They are always applied and affect all Copilot suggestions in the repo.
+- **Agents**: Give Copilot a specific persona, task focus, or toolset for specialized workflows (e.g., code review agent, onboarding agent). Agents are invoked for particular tasks and can override or extend instructions.
+- **Skills**: Package reusable workflows or capabilities that agents (or Copilot itself) can use. Skills are like modular building blocks for automation or guidance.
 
-1. Open `.github/copilot-instructions.md` — it defines Python style, testing, and error handling conventions.
-
-2. **Test without instructions:** Rename the file to `copilot-instructions.md.bak`. Ask Chat:
-   > *"Write a function to merge two data pipeline outputs into one"*
-   
-   Note the style.
-
-3. **Test with instructions:** Rename it back. Ask the same question. Compare:
-   - Does it use `pathlib.Path` (not `os.path`)?
-   - Does it have Google-style docstrings?
-   - Does it use type hints?
-
-### Task 1b: Add a convention and see it enforced
-
-Add this to `.github/copilot-instructions.md`:
-
-```markdown
-## Logging
-- Use `structlog` instead of `logging` for structured log output
-- Always include `event`, `level`, and context fields
-```
-
-Then ask Chat: *"Add logging to the DataPipeline.run() method"*. Does it use `structlog`?
-
-### Task 1c: Create a reusable prompt file
-
-Create `.github/copilot/prompts/generate-tests.prompt.md`:
-
-```markdown
----
-description: Generate pytest tests following project conventions
----
-Generate comprehensive pytest tests for the selected code.
-
-Requirements:
-- Use factory fixtures (fixture returns a function)
-- Use `tmp_path` for any file system operations
-- Use `pytest.mark.parametrize` for edge cases
-- Include happy path, error cases, and boundary tests
-```
-
-Select `DataPipeline._transform()` → open Chat → type `/` → select your prompt. Compare with a default `/tests` request.
-
-<details>
-<summary>💡 Key takeaway</summary>
-
-Instructions are the foundation. They cost nothing to set up and immediately improve every Copilot interaction across your team. Start here for any project.
-
-</details>
+Start with Copilot Instructions to ensure everyone codes the same way. Use Agents and Skills to go further with specialized automation and workflows.
 
 ---
 
@@ -117,11 +66,11 @@ Instructions are the foundation. They cost nothing to set up and immediately imp
 
 ### What are they?
 
-Agents are markdown files (`.github/copilot/agents/*.agent.md`) that give Copilot a **persona, a specific task focus, and optionally restricted tool access**. Think of them as specialized coworkers: one agent for code review, another for database work, another for onboarding.
+Agents are markdown files (`.github/agents/*.agent.md`) that give Copilot a **persona, a specific task focus, and optionally restricted tool access**. Think of them as specialized coworkers: one agent for code review, another for database work, another for onboarding.
 
 Unlike instructions (which apply globally), agents are **invoked by name** — you choose when to use them.
 
-### How agents differ from instructions
+#### How agents differ from instructions
 
 | | Instructions | Agents |
 |---|---|---|
@@ -132,16 +81,16 @@ Unlike instructions (which apply globally), agents are **invoked by name** — y
 
 ### Task 2a: Create an onboarding agent
 
-Create `.github/copilot/agents/onboarding-buddy.agent.md`:
+Create `.github/agents/onboarding-buddy.agent.md`:
 
 ```markdown
 ---
 description: Helps new PeopleFlow developers get up to speed
 tools:
-  - read_file
-  - grep_search
-  - file_search
-  - semantic_search
+  - read
+  - web
+  - agent
+
 ---
 
 You are an onboarding buddy at PeopleFlow. You help new developers
@@ -175,33 +124,6 @@ I've been assigned issue-001. What files should I look at?
 ```
 
 Check: Does the agent reference actual PeopleFlow files? Does it use a helpful, welcoming tone?
-
-### Task 2c: Create a code review agent
-
-Create `.github/copilot/agents/reviewer.agent.md`:
-
-```markdown
----
-description: Reviews PeopleFlow code against team conventions
-tools:
-  - read_file
-  - grep_search
----
-
-You are a strict code reviewer at PeopleFlow. Review code against:
-1. Multi-tenancy: Every DB query must scope to tenant_id.
-2. Error handling: Use PeopleFlowError subclasses, never raw HTTPException.
-3. Permissions: Use @require_role() decorator, not FastAPI Depends().
-4. Logging: Use structured logger from shared/logger.py, never print().
-5. Naming: Branch naming (feature/, fix/, chore/), conventional commits.
-
-For each issue found, cite the specific convention and the file where
-the pattern is defined.
-```
-
-Test it: `@reviewer Review the create_review_cycle method in src/performance/reviews_service.py`
-
-It should catch the missing date validation (issue-003).
 
 <details>
 <summary>💡 Key takeaway</summary>
@@ -239,54 +161,24 @@ Agents let you create focused, reusable "roles" that Copilot can assume. They're
 
 An agent can **use** MCP tools. For example, the onboarding buddy agent could query a live database to show real employee counts, or call a documentation API to fetch the latest architecture docs.
 
-### Task 3a: Explore available MCP servers
+### Task 3a: Install the GitHub MCP server
 
 Open the Command Palette (`Ctrl+Shift+P`) → **MCP: List Servers** to see what's configured.
 
-If none are configured yet, open `.vscode/mcp.json` (or create it) and add:
+If the GitHub server isn't listed, add it:
 
-```json
-{
-  "servers": {
-    "filesystem": {
-      "command": "npx",
-      "args": [
-        "-y",
-        "@anthropic/mcp-filesystem",
-        "${workspaceFolder}/peopleflow"
-      ]
-    }
-  }
-}
-```
+1. Open the Command Palette (`Ctrl+Shift+P`) → **MCP: Add Server**
+2. Select **Browse MCP Servers...**
+3. Search for **GitHub** and install the official GitHub MCP server
+4. Create a Personal Access Token (PAT):
+   - Go to [github.com/settings/tokens](https://github.com/settings/tokens) → **Generate new token (classic)**
+   - Give it a name (e.g. `vscode-mcp`) and set an expiry
+   - Select scopes: `repo` (full repo access) and `read:org`
+   - Click **Generate token** and copy the value — you won't see it again
+5. Back in VS Code, paste the token when prompted for authentication
 
-This gives Copilot read/write access to the PeopleFlow directory through a structured MCP interface (rather than raw terminal commands).
+VS Code will add the server to `.vscode/mcp.json` automatically. This gives Copilot live access to GitHub — issues, PRs, repos, and more — without leaving the editor.
 
-### Task 3b: Use MCP tools through an agent
-
-Update your onboarding buddy agent to reference MCP tools. In Chat, try:
-
-```
-@onboarding-buddy Using the filesystem tools, find all files that
-reference tenant_id and explain the multi-tenancy pattern.
-```
-
-```
-@onboarding-buddy Search the codebase for TODO comments and list
-them with their file locations.
-```
-
-### Task 3c: Understand the MCP concept with a real-world example
-
-Even without a live MCP server, understand the pattern by asking Chat:
-
-```
-If I had an MCP server connected to our PostgreSQL database, how would
-I ask Copilot to check how many employees each tenant has? What would
-the MCP tool call look like?
-```
-
-This illustrates the key value: Copilot moves from "generate code based on docs" to "query live systems and act on real data."
 
 <details>
 <summary>💡 Key takeaway</summary>
@@ -310,7 +202,7 @@ Think of it as the difference between "I configured my editor" and "I built an o
 | Layer | Where it lives | Who benefits |
 |-------|---------------|-------------|
 | Instructions | `.github/copilot-instructions.md` | Devs using this repo locally |
-| Agents | `.github/copilot/agents/` | Devs using VS Code |
+| Agents | `.github/agents/` | Devs using VS Code |
 | MCP Servers | `.vscode/mcp.json` | Devs with tools installed locally |
 | **Spaces** | **github.com/copilot/spaces** | **Anyone with a link — no setup** |
 
@@ -360,8 +252,32 @@ What would happen if I forgot to include tenant_id in a database query?
 
 This is the value of context engineering: the same AI, dramatically different usefulness.
 
+### Task 4d: Connect your Space to the GitHub MCP server
+
+A Space can go further than static docs — it can call live tools via MCP, giving it access to real issues, PRs, and repo data at query time.
+
+1. Open your Space at [github.com/copilot/spaces](https://github.com/copilot/spaces)
+2. Go to **Settings** → **Integrations** (or **Tools**)
+3. Select **Add MCP Server** and choose **GitHub**
+4. Authenticate with the same Personal Access Token you created in Task 3a (`repo` and `read:org` scopes)
+5. Save and return to your Space
+
+(or just ask Copilot Chat to do it for you)
+
+Once connected, your Space can answer questions using live GitHub data — not just the static files you uploaded. Try:
+
+```
+Using the GitHub tools, list all open issues in this repo labelled "good first issue" and suggest which one a new joiner should pick up.
+```
+
+```
+Fetch the latest merged PRs and summarise what changed in the employees service this week.
+```
+
 <details>
 <summary>💡 Key takeaway</summary>
+
+Connecting MCP to a Space bridges static knowledge (your docs and code) with live data (real issues, PRs, and repo activity). A new joiner can get up to speed *and* stay current — all from one place, with no local setup.
 
 Spaces are the team-scale payoff. One person writes good docs and instructions, and every team member — present and future — benefits instantly, without any local configuration.
 
